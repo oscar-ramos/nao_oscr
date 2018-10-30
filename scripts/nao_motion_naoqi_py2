@@ -1,0 +1,99 @@
+#!/usr/bin/env python
+#
+# Generate kinematic motion to control the position/orientation of some
+# operational points of the NAO robot
+#
+#
+#  To use it (with local naoqi):
+#      1) naoqi --verbose --broker-ip 127.0.0.1
+#      2) roslaunch nao_bringup nao_full_py.launch nao_ip:=127.0.0.1
+#      3) roslaunch nao_oscr display.launch
+#      4) rosrun nao_oscr nao_motion_naoqi_py
+#
+
+
+import rospy
+import numpy as np
+
+from nao_oscr import NaoSimRosRobot, NaoRosRobot
+from oscr.utils import incPosition, incPoseLocal
+
+
+if __name__ == '__main__':
+
+    # Whether floating base is used or not
+    fbase = False
+    # Frequency
+    f = 100.0
+    # Robot simulation instance (choose 'pin' or 'rbdl')
+    nao = NaoRosRobot('naoMotionNaoqiPy', f, fbase, 'pin')
+
+    qsensed = nao.getMeasuredJointPositions();
+    nao.updateModel(qsensed)
+
+    # Initialize solver: use 'HQP' (default), 'NS', or 'WQP'
+    nao.initKineSolver(qsensed)
+    # nao.initKineSolver(q, 'NS')
+    # nao.initKineSolver(q, 'WQP') # Usually needs x 10 in task gain
+
+    flag = 1
+    if (flag == 0):
+        # Tasks
+        nao.addKineTaskPose('r_wrist','position','RHand')
+        nao.addKineTaskPose('l_wrist','position','LHand')
+
+        # Set desired pose for the hand
+        currentPosHand = nao.task['RHand'].getCurrentValue()
+        desiredPosHand = incPosition(currentPosHand, [0.02, -0.05, 0.10])
+        nao.task['RHand'].setDesiredValue(desiredPosHand)
+        nao.task['RHand'].marker[1].setPose(desiredPosHand)
+
+        # Set desired position for the hand
+        currentPosHand = nao.task['LHand'].getCurrentValue()
+        desiredPosHand = incPosition(currentPosHand, [0.02, 0.05, 0.10])
+        nao.task['LHand'].setDesiredValue(desiredPosHand)
+        nao.task['LHand'].marker[1].setPose(desiredPosHand)
+
+        # Add task to the solver
+        nao.solver.pushTask(nao.task['RHand']);
+        nao.solver.pushTask(nao.task['LHand']);
+
+    elif (flag == 1):
+
+        # Tasks
+        nao.addKineTaskPose('r_wrist','pose','RHand')
+        nao.addKineTaskPose('l_wrist','pose','LHand')
+
+        # Set desired pose for the hand
+        currentPosHand = nao.task['RHand'].getCurrentValue()
+        desiredPosHand = incPoseLocal(currentPosHand,
+                                      (0.05, -0.03, 0.08),
+                                      (-30.0, (1.0, 0.0, 0.0)))
+        nao.task['RHand'].setDesiredValue(desiredPosHand)
+        nao.task['RHand'].marker[1].setPose(desiredPosHand)
+
+        # Set desired pose for the hand
+        currentPosHand = nao.task['LHand'].getCurrentValue()
+        desiredPosHand = incPoseLocal(currentPosHand,
+                                      (0.05, 0.03, 0.08),
+                                      (30.0, (1.0, 0.0, 0.0)))
+        nao.task['LHand'].setDesiredValue(desiredPosHand)
+        nao.task['LHand'].marker[1].setPose(desiredPosHand)
+
+        # Add task to the solver
+        nao.solver.pushTask(nao.task['RHand']);
+        nao.solver.pushTask(nao.task['LHand']);
+
+    # # When using an interactive session (with ipython) and a single task,
+    # # it is recommended to use doTask. After task completion, update the
+    # # desired pose and call doTask again
+    # # doTask(nao, 'RHand', desiredPosHand, 0.005)
+
+    qdes = qsensed.copy()
+    while not rospy.is_shutdown():
+    #for i in xrange(1):
+        # When using rosrun (noninteractive) the following is recommended
+        nao.solver.getPositionControl(qsensed, qdes)
+        nao.setJointPositionsCmd(qdes)
+        qsensed = qdes.copy();
+        nao.rate.sleep()

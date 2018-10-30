@@ -1,0 +1,82 @@
+#!/usr/bin/env python
+#
+# Test the model of the NAO robot
+#
+# To use it:
+#
+#     1) If floating base is not used (fbase = False):
+#            roslaunch nao_oscr display.launch
+#        If floating base is used (fbase = True):
+#            roslaunch nao_oscr display_floating.launch
+#
+#     2) + Option 1 (interactive):
+#          roscd nao_oscr/scripts; ipython -i nao_model_py
+#        + Option 2:
+#          rosrun nao_oscr nao_model_py
+#
+
+
+import numpy as np
+from nao_oscr import NaoSimRosRobot
+
+
+if __name__ == '__main__':
+
+    # Whether floating base is used or not
+    fbase = True
+    # Frequency
+    f = 50.0
+    # Robot simulation instance (use 'pin' or 'rbdl')
+    sim = NaoSimRosRobot('naoModelPy', f, fbase, 'pin')
+    # Print robot model information
+    sim.robot.printModelInfo()
+
+    # Joint configuration
+    if (fbase):
+        # Initial configuration with floating base
+        q = [0.0, 0.0, 0.33046, 1.0, 0.0, 0.0, 0.0,
+             0.0, 0.0,
+             0.0, 0.0, -0.1, 0.3, -0.2, 0.0,
+             1.15,  0.10, -1.4, -0.79, 0.0, 0.0,
+             0.0, 0.0, -0.1, 0.3, -0.2, 0.0,
+             1.15, -0.10,  1.4,  0.79, 0.0, 0.0]
+        if (False):
+            # Change base position
+            q[0] = 0.2
+            q[1] = 0.4
+            q[2] = 0.3
+            # Change base orientation
+            t = np.pi/3
+            q[3] = np.cos(t)
+            q[4] = np.sin(t)
+    else:
+        q = sim.robot.ndof*[0.,]
+    # Set the joint configuration to the robot
+    q = np.matrix([q]).transpose()
+    sim.updateModel(q)
+
+    # # Set feet on the ground (to be done just once)
+    # dsole = 0.04511; # From URDF: dist between ankle and sole
+    # q = sim.robot.model.setFeetOnGround("r_ankle", "l_ankle", dsole);
+    # sim.updateModel(q)
+
+    # Positions
+    position1 = sim.robot.model.linkPosition('l_wrist')
+    position2 = sim.robot.model.linkPosition('r_wrist')
+    print "Link l_wrist position: ", position1.transpose()
+    print "Link r_wrist position: ", position2.transpose()
+
+    # Ball markers
+    sim.initRobotBallMarkers(['RED','RED'], ['l_wrist','r_wrist'])
+    # Frame markers
+    sim.initRobotFrameMarkers([1.0, 1.0],['l_wrist','r_wrist'])
+
+    # Example of joint motion
+    for k in range(200):
+        q[sim.robot.mjoint['LShoulderPitch']] += 0.005
+        q[sim.robot.mjoint['LShoulderRoll']]  += 0.005
+        q[sim.robot.mjoint['LElbowRoll']]     -= 0.005
+        q[sim.robot.mjoint['RShoulderPitch']] += 0.005
+        q[sim.robot.mjoint['RShoulderRoll']]  -= 0.005
+        q[sim.robot.mjoint['RElbowRoll']]     += 0.005
+        sim.updateModel(q)

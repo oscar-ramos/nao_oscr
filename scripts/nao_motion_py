@@ -1,0 +1,106 @@
+#!/usr/bin/env python
+#
+# Generate kinematic motion to control the position/orientation of some
+# operational points of the NAO robot
+#
+# To use it:
+#
+#     1) If floating base is not used (fbase = False):
+#            roslaunch nao_oscr display.launch
+#        If floating base is used (fbase = True):
+#            roslaunch nao_oscr display_floating.launch
+#
+#     2) + Option 1 (interactive):
+#          roscd nao_oscr/scripts/motion; ipython -i nao_motion_py
+#        + Option 2:
+#          rosrun nao_oscr nao_motion_py
+#
+
+
+import rospy
+import numpy as np
+
+from nao_oscr import NaoSimRosRobot
+from oscr.utils import incPosition, incPoseLocal
+
+
+if __name__ == '__main__':
+
+    # Whether floating base is used or not
+    fbase = True
+    # Frequency
+    f = 100.0
+    # Robot simulation instance (choose 'pin' or 'rbdl')
+    sim = NaoSimRosRobot('naoMotionPy', f, fbase, 'pin')
+
+    # Joint configuration
+    if (fbase):
+        q = [0.0, 0.0, 0.33046, 1.0, 0.0, 0.0, 0.0,
+             0.0, 0.0,
+             0.0, 0.0, -0.1, 0.3, -0.2, 0.0,
+             1.15,  0.10, -1.4, -0.79, 0.0, 0.0,
+             0.0, 0.0, -0.1, 0.3, -0.2, 0.0,
+             1.15, -0.10,  1.4,  0.79, 0.0, 0.0]
+    else:
+        q = sim.robot.ndof*[0.,]
+    # Set the configuration to the robot
+    q = np.array([q]).transpose()
+    sim.updateModel(q)
+
+    # Initialize solver: use 'HQP' (default), 'NS', or 'WQP'
+    sim.initKineSolver(q)
+    # sim.initKineSolver(q, 'NS')
+    # sim.initKineSolver(q, 'WQP') # Usually needs x 10 in task gain
+
+    if (fbase):
+        # Tasks
+        sim.addKineTaskPose('r_wrist','pose','RHand')
+        sim.addKineTaskPose('l_ankle','pose','LAnkle')
+        sim.addKineTaskPose('r_ankle','pose','RAnkle')
+
+        # Keep ankles wihtout motion
+        sim.task['LAnkle'].keep(10.0)
+        sim.task['RAnkle'].keep(10.0)
+        desiredLAnkle = sim.task['LAnkle'].getDesiredValue()
+        desiredRAnkle = sim.task['RAnkle'].getDesiredValue()
+        sim.task['LAnkle'].marker[1].setPose(desiredLAnkle)
+        sim.task['RAnkle'].marker[1].setPose(desiredRAnkle)
+
+        # Set desired pose for the hand
+        currentRHand = sim.task['RHand'].getCurrentValue()
+        desiredRHand = incPoseLocal(currentRHand,
+                                    (-0.05, -0.05, 0.06),
+                                    (-50., (1., 0., 0.)))
+        #desiredRHand = incPosition(currentRHand, [-0.10, -0.05, 0.10])
+        sim.task['RHand'].setDesiredValue(desiredRHand)
+        sim.task['RHand'].marker[1].setPose(desiredRHand)
+
+        # Add task to the solver
+        sim.solver.pushTask(sim.task['LAnkle'])
+        sim.solver.pushTask(sim.task['RAnkle'])
+        sim.solver.pushTask(sim.task['RHand'])
+
+    else:
+        # Task
+        sim.addKineTaskPose('r_wrist', 'position', 'RHand')
+        # Set desired pose for the hand
+        currentPosHand = sim.task['RHand'].getCurrentValue()
+        desiredPosHand = incPosition(currentPosHand, [-0.05, 0., 0.05])
+        sim.task['RHand'].setDesiredValue(desiredPosHand)
+        sim.task['RHand'].marker[1].setPose(desiredPosHand)
+        # Add task to the solver
+        sim.solver.pushTask(sim.task['RHand']);
+
+    # When using an interactive session (with ipython) and a single task,
+    # it is recommended to use doTask. After task completion, update the
+    # desired pose and call doTask again
+    # doTask(sim, 'RHand', desiredPosHand, 0.005)
+
+    qdes = q.copy()
+    while not rospy.is_shutdown():
+    #for i in xrange(1):
+        # When using rosrun (noninteractive) the following is recommended
+        sim.solver.getPositionControl(q, qdes)
+        sim.updateKine(qdes)
+        q = qdes.copy();
+        sim.rate.sleep()
