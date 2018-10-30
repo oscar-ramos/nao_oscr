@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+
+<launch>
+
+  <arg name="version" default="V40" />
+  <param name="robot_description" command="$(find xacro)/xacro.py $(find nao_description)/urdf/nao$(arg version)_generated_urdf/nao_robot.xacro" />
+
+  <node pkg="robot_state_publisher" type="state_publisher"
+        name="robot_state_publisher" />
+
+  <arg name="gui" default="True" />
+  <param name="use_gui" value="$(arg gui)"/>
+  <node name="joint_state_publisher" pkg="joint_state_publisher"
+        type="joint_state_publisher" />
+
+  <arg name="config_file" value="$(find nao_oscr)/config/nao.rviz"/>
+  <node name="$(anon rviz)" pkg="rviz" type="rviz" respawn="false"
+        output="screen" args="-d $(arg config_file)" />
+</launch>
