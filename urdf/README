@@ -1,0 +1,7 @@
+"naoV40red.urdf" is a NAO model that does not include the fingers as
+articulated joints (they are used only to open or close the hand, anyways). It
+has 26 degrees of freedom instead of 42.
+
+This nao urdf has been taken from
+    nao_description/urdf/naoV40_generated_urdf/nao.urdf
+but "continuous" joints (fingers) have been changed to "fixed"
