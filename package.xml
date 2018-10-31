@@ -17,5 +17,6 @@
   <run_depend>rospy</run_depend>
   <run_depend>sensor_msgs</run_depend>
   <run_depend>naoqi_bridge_msgs</run_depend>
+  <run_depend>nao_description</run_depend>
 
 </package>
