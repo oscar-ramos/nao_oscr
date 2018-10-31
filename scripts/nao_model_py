@@ -16,30 +16,45 @@
 #
 
 
+from optparse import OptionParser
 import numpy as np
-from nao_oscr import NaoSimRosRobot
+
+from nao_oscr import NaoRosRobot
+from oscr.ros_robot import RosRobot
 
 
 if __name__ == '__main__':
 
-    # Whether floating base is used or not
-    fbase = True
+    # Parse the arguments
+    parser = OptionParser()
+    parser.add_option("--back", dest="back", default="pin",
+                      help="back can be pin (default), rbdl, or ff6dof")
+    parser.add_option("--base", dest="base", default="floating",
+                      help="base can be floating (default) or fixed")
+    (options, args) = parser.parse_args()
+    # Backend: 'pin' (default) or 'rbdl'
+    backend = options.back
+    # Floating base? 'floating' (default) or 'fixed'
+    if (options.base=='floating'): fbase = True
+    elif (options.base=='fixed'): fbase = False
+    else: print 'Option not supported: use floating or fixed'
+                                 
     # Frequency
     f = 50.0
-    # Robot simulation instance (use 'pin' or 'rbdl')
-    sim = NaoSimRosRobot('naoModelPy', f, fbase, 'pin')
+    # Robot simulation instance ('pin' or 'rbdl')
+    robot = NaoRosRobot('naoModelPy', f, fbase, backend)
     # Print robot model information
-    sim.robot.printModelInfo()
+    robot.printModelInfo()
 
     # Joint configuration
     if (fbase):
         # Initial configuration with floating base
-        q = [0.0, 0.0, 0.33046, 1.0, 0.0, 0.0, 0.0,
-             0.0, 0.0,
-             0.0, 0.0, -0.1, 0.3, -0.2, 0.0,
-             1.15,  0.10, -1.4, -0.79, 0.0, 0.0,
-             0.0, 0.0, -0.1, 0.3, -0.2, 0.0,
-             1.15, -0.10,  1.4,  0.79, 0.0, 0.0]
+        q = np.array([[0.0, 0.0, 0.33046, 1.0, 0.0, 0.0, 0.0,
+                       0.0, 0.0,
+                       0.0, 0.0, -0.1, 0.3, -0.2, 0.0,
+                       1.15,  0.10, -1.4, -0.79, 0.0, 0.0,
+                       0.0, 0.0, -0.1, 0.3, -0.2, 0.0,
+                       1.15, -0.10,  1.4,  0.79, 0.0, 0.0]]).T
         if (False):
             # Change base position
             q[0] = 0.2
@@ -50,33 +65,33 @@ if __name__ == '__main__':
             q[3] = np.cos(t)
             q[4] = np.sin(t)
     else:
-        q = sim.robot.ndof*[0.,]
+        q = robot.ndof*[0.,]
     # Set the joint configuration to the robot
-    q = np.matrix([q]).transpose()
-    sim.updateModel(q)
-
+    robot.update(q)
+    
     # # Set feet on the ground (to be done just once)
     # dsole = 0.04511; # From URDF: dist between ankle and sole
     # q = sim.robot.model.setFeetOnGround("r_ankle", "l_ankle", dsole);
     # sim.updateModel(q)
 
     # Positions
-    position1 = sim.robot.model.linkPosition('l_wrist')
-    position2 = sim.robot.model.linkPosition('r_wrist')
+    position1 = robot.linkPosition(robot.mlink['l_wrist'])
+    position2 = robot.linkPosition(robot.mlink['r_wrist'])
     print "Link l_wrist position: ", position1.transpose()
     print "Link r_wrist position: ", position2.transpose()
 
     # Ball markers
-    sim.initRobotBallMarkers(['RED','RED'], ['l_wrist','r_wrist'])
+    robot.initRobotBallMarkers(['RED','RED'], ['l_wrist','r_wrist'])
     # Frame markers
-    sim.initRobotFrameMarkers([1.0, 1.0],['l_wrist','r_wrist'])
+    robot.initRobotFrameMarkers([1.0, 1.0],['l_wrist','r_wrist'])
 
     # Example of joint motion
     for k in range(200):
-        q[sim.robot.mjoint['LShoulderPitch']] += 0.005
-        q[sim.robot.mjoint['LShoulderRoll']]  += 0.005
-        q[sim.robot.mjoint['LElbowRoll']]     -= 0.005
-        q[sim.robot.mjoint['RShoulderPitch']] += 0.005
-        q[sim.robot.mjoint['RShoulderRoll']]  -= 0.005
-        q[sim.robot.mjoint['RElbowRoll']]     += 0.005
-        sim.updateModel(q)
+        q[robot.mjoint['LShoulderPitch']] += 0.005
+        q[robot.mjoint['LShoulderRoll']]  += 0.005
+        q[robot.mjoint['LElbowRoll']]     -= 0.005
+        q[robot.mjoint['RShoulderPitch']] += 0.005
+        q[robot.mjoint['RShoulderRoll']]  -= 0.005
+        q[robot.mjoint['RElbowRoll']]     += 0.005
+        robot.updateWithMarkers(q)
+        robot.rate.sleep()

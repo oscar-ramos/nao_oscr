@@ -17,68 +17,88 @@
 #
 
 
-import rospy
+from optparse import OptionParser
 import numpy as np
 
-from nao_oscr import NaoSimRosRobot
+import rospy
+#from nao_oscr import NaoRosRobot
+from oscr.ros_kine_sim import RosKineSim
 from oscr.utils import incPosition, incPoseLocal
 
 
 if __name__ == '__main__':
 
-    # Whether floating base is used or not
-    fbase = True
+    # Parse the arguments
+    parser = OptionParser()
+    parser.add_option("--back", dest="back", default="pin",
+                      help="back can be pin (default), rbdl, or ff6dof")
+    parser.add_option("--base", dest="base", default="floating",
+                      help="base can be floating (default) or fixed")
+    parser.add_option("--solver", dest="solver", default="hqp",
+                      help="solver can be hqp (default), ns (nullspace) or \
+                      wqp (weighted qp")
+    (options, args) = parser.parse_args()
+    # Backend: 'pin' (default) or 'rbdl'
+    backend = options.back
+    # Floating base? 'floating' (default) or 'fixed'
+    if (options.base=='floating'): fbase = True
+    elif (options.base=='fixed'): fbase = False
+    else: print 'Option not supported: use floating or fixed'
+    # Solver
+    solvertype = options.solver
+        
     # Frequency
     f = 100.0
-    # Robot simulation instance (choose 'pin' or 'rbdl')
-    sim = NaoSimRosRobot('naoMotionPy', f, fbase, 'pin')
+    # Robot simulation instance ('pin' or 'rbdl')
+    #robot = NaoRosRobot('naoMotionPy', f, fbase, backend)
+    sim = RosKineSim('naoMotion', 'nao_oscr',
+                     '/urdf/naoV40red.urdf', f, fbase, backend)
 
     # Joint configuration
     if (fbase):
-        q = [0.0, 0.0, 0.33046, 1.0, 0.0, 0.0, 0.0,
-             0.0, 0.0,
-             0.0, 0.0, -0.1, 0.3, -0.2, 0.0,
-             1.15,  0.10, -1.4, -0.79, 0.0, 0.0,
-             0.0, 0.0, -0.1, 0.3, -0.2, 0.0,
-             1.15, -0.10,  1.4,  0.79, 0.0, 0.0]
+        q = np.array([[0.0, 0.0, 0.33046, 1.0, 0.0, 0.0, 0.0,
+                       0.0, 0.0,
+                       0.0, 0.0, -0.1, 0.3, -0.2, 0.0,
+                       1.15,  0.10, -1.4, -0.79, 0.0, 0.0,
+                       0.0, 0.0, -0.1, 0.3, -0.2, 0.0,
+                       1.15, -0.10,  1.4,  0.79, 0.0, 0.0]]).T
     else:
         q = sim.robot.ndof*[0.,]
     # Set the configuration to the robot
-    q = np.array([q]).transpose()
-    sim.updateModel(q)
+    sim.update(q)
 
-    # Initialize solver: use 'HQP' (default), 'NS', or 'WQP'
-    sim.initKineSolver(q)
-    # sim.initKineSolver(q, 'NS')
-    # sim.initKineSolver(q, 'WQP') # Usually needs x 10 in task gain
-
+    # Initialize solver: use 'HQP', 'NS' or 'WQP'
+    if solvertype == 'hqp': sim.initKineSolver(q)  # default is HQP
+    elif solvertype == 'ns': sim.initKineSolver(q, 'NS')
+    elif solvertype == 'wqp': sim.initKineSolver(q, 'WQP')
+    else: print 'Solver type not supported'
+            
     if (fbase):
         # Tasks
-        sim.addKineTaskPose('r_wrist','pose','RHand')
-        sim.addKineTaskPose('l_ankle','pose','LAnkle')
-        sim.addKineTaskPose('r_ankle','pose','RAnkle')
-
+        sim.initKineTaskPose('r_wrist','pose','RHand')
+        sim.initKineTaskPose('l_ankle','pose','LAnkle')
+        sim.initKineTaskPose('r_ankle','pose','RAnkle')
+        
         # Keep ankles wihtout motion
         sim.task['LAnkle'].keep(10.0)
         sim.task['RAnkle'].keep(10.0)
-        desiredLAnkle = sim.task['LAnkle'].getDesiredValue()
-        desiredRAnkle = sim.task['RAnkle'].getDesiredValue()
-        sim.task['LAnkle'].marker[1].setPose(desiredLAnkle)
-        sim.task['RAnkle'].marker[1].setPose(desiredRAnkle)
+        # desiredLAnkle = sim.task['LAnkle'].getDesiredValue()
+        # desiredRAnkle = sim.task['RAnkle'].getDesiredValue()
+        # sim.task['LAnkle'].marker[1].setPose(desiredLAnkle)
+        # sim.task['RAnkle'].marker[1].setPose(desiredRAnkle)
 
         # Set desired pose for the hand
-        currentRHand = sim.task['RHand'].getCurrentValue()
+        currentRHand = sim.task['RHand'].getSensedValue()
         desiredRHand = incPoseLocal(currentRHand,
                                     (-0.05, -0.05, 0.06),
                                     (-50., (1., 0., 0.)))
         #desiredRHand = incPosition(currentRHand, [-0.10, -0.05, 0.10])
         sim.task['RHand'].setDesiredValue(desiredRHand)
-        sim.task['RHand'].marker[1].setPose(desiredRHand)
 
         # Add task to the solver
-        sim.solver.pushTask(sim.task['LAnkle'])
-        sim.solver.pushTask(sim.task['RAnkle'])
-        sim.solver.pushTask(sim.task['RHand'])
+        sim.pushTask(sim.task['LAnkle'])
+        sim.pushTask(sim.task['RAnkle'])
+        sim.pushTask(sim.task['RHand'])
 
     else:
         # Task
@@ -96,11 +116,10 @@ if __name__ == '__main__':
     # desired pose and call doTask again
     # doTask(sim, 'RHand', desiredPosHand, 0.005)
 
-    qdes = q.copy()
     while not rospy.is_shutdown():
     #for i in xrange(1):
         # When using rosrun (noninteractive) the following is recommended
-        sim.solver.getPositionControl(q, qdes)
-        sim.updateKine(qdes)
-        q = qdes.copy();
+        qdes = sim.getPositionControl(q)
+        sim.update(qdes)
+        q = qdes.copy()
         sim.rate.sleep()
