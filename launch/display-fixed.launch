@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+
+<launch>
+
+  <arg name="version" default="V40" />
+  <param name="robot_description" command="$(find xacro)/xacro --inorder $(find nao_description)/urdf/nao$(arg version)_generated_urdf/nao_robot.xacro" />
+
+  <node name="robot_state_publisher" pkg="robot_state_publisher"
+        type="robot_state_publisher" />
+
+  <arg name="config_file" value="$(find nao_oscr)/config/nao.rviz"/>
+  <node name="rviz_display" pkg="rviz" type="rviz" respawn="false"
+        output="screen" args="-d $(arg config_file)" />
+
+  <param name="reference_frame" value="base_link" />
+</launch>
