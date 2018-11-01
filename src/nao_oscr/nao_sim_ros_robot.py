@@ -34,7 +34,6 @@ class NaoRosRobot(RosRobot):
                         'RFinger22','RFinger23','RThumb1','RThumb2')
         self.joint_pub.appendJointNames(finger_names)
         # Set finger values to zero
-        # self.qextras = np.array([16*[0.0,]]).transpose()
         self.qextras = np.array([[0.0, 0.0, 0.0, 0.0,
                                   0.0, 0.0, 0.0, 0.0,
                                   0.0, 0.0, 0.0, 0.0,

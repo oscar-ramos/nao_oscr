@@ -5,15 +5,18 @@
 #
 # To use it:
 #
-#     1) If floating base is not used (fbase = False):
+#     1) If floating base is used (default):
 #            roslaunch nao_oscr display.launch
-#        If floating base is used (fbase = True):
-#            roslaunch nao_oscr display_floating.launch
+#            rosrun nao_oscr motion_arms
 #
-#     2) + Option 1 (interactive):
-#          roscd nao_oscr/scripts/motion; ipython -i nao_motion_py
-#        + Option 2:
-#          rosrun nao_oscr nao_motion_py
+#        Note: For interactive mode, instead of rosrun use
+#            roscd nao_oscr/scripts
+#            ipython -i motion_arms
+#
+#     2) If floating base is not used:
+#            roslaunch nao_oscr display-fixed.launch
+#            rosrun nao_oscr motion_arms --base fixed
+#
 #
 
 
@@ -21,7 +24,6 @@ from optparse import OptionParser
 import numpy as np
 
 import rospy
-#from nao_oscr import NaoRosRobot
 from oscr.ros_kine_sim import RosKineSim
 from oscr.utils import incPosition, incPoseLocal
 
@@ -50,7 +52,6 @@ if __name__ == '__main__':
     # Frequency
     f = 100.0
     # Robot simulation instance ('pin' or 'rbdl')
-    #robot = NaoRosRobot('naoMotionPy', f, fbase, backend)
     sim = RosKineSim('naoMotion', 'nao_oscr',
                      '/urdf/naoV40red.urdf', f, fbase, backend)
 
@@ -63,7 +64,7 @@ if __name__ == '__main__':
                        0.0, 0.0, -0.1, 0.3, -0.2, 0.0,
                        1.15, -0.10,  1.4,  0.79, 0.0, 0.0]]).T
     else:
-        q = sim.robot.ndof*[0.,]
+        q = np.array([sim.robot.ndof*[0.,]]).T
     # Set the configuration to the robot
     sim.update(q)
 
@@ -76,49 +77,51 @@ if __name__ == '__main__':
     if (fbase):
         # Tasks
         sim.initKineTaskPose('r_wrist','pose','RHand')
+        sim.initKineTaskPose('l_wrist','pose','LHand')
         sim.initKineTaskPose('l_ankle','pose','LAnkle')
         sim.initKineTaskPose('r_ankle','pose','RAnkle')
         
-        # Keep ankles wihtout motion
+        # Keep ankles without motion
         sim.task['LAnkle'].keep(10.0)
         sim.task['RAnkle'].keep(10.0)
-        # desiredLAnkle = sim.task['LAnkle'].getDesiredValue()
-        # desiredRAnkle = sim.task['RAnkle'].getDesiredValue()
-        # sim.task['LAnkle'].marker[1].setPose(desiredLAnkle)
-        # sim.task['RAnkle'].marker[1].setPose(desiredRAnkle)
 
-        # Set desired pose for the hand
+        # Set desired pose for the right hand
         currentRHand = sim.task['RHand'].getSensedValue()
         desiredRHand = incPoseLocal(currentRHand,
-                                    (-0.05, -0.05, 0.06),
+                                    (-0.05, -0.05, 0.08),
                                     (-50., (1., 0., 0.)))
-        #desiredRHand = incPosition(currentRHand, [-0.10, -0.05, 0.10])
         sim.task['RHand'].setDesiredValue(desiredRHand)
+
+        # Set desired pose for the left hand
+        currentLHand = sim.task['LHand'].getSensedValue()
+        desiredLHand = incPoseLocal(currentLHand,
+                                    (0.05, 0.05, 0.08),
+                                    (50., (1., 0., 0.)))
+        sim.task['LHand'].setDesiredValue(desiredLHand)
 
         # Add task to the solver
         sim.pushTask(sim.task['LAnkle'])
         sim.pushTask(sim.task['RAnkle'])
         sim.pushTask(sim.task['RHand'])
+        sim.pushTask(sim.task['LHand'])
 
     else:
-        # Task
-        sim.addKineTaskPose('r_wrist', 'position', 'RHand')
-        # Set desired pose for the hand
-        currentPosHand = sim.task['RHand'].getCurrentValue()
-        desiredPosHand = incPosition(currentPosHand, [-0.05, 0., 0.05])
-        sim.task['RHand'].setDesiredValue(desiredPosHand)
-        sim.task['RHand'].marker[1].setPose(desiredPosHand)
+        # Tasks
+        sim.initKineTaskPose('r_wrist', 'position', 'RHand')
+        sim.initKineTaskPose('l_wrist', 'position', 'LHand')
+        # Set desired pose for the right hand
+        currentRHand = sim.task['RHand'].getSensedValue()
+        desiredRHand = incPosition(currentRHand, [-0.05, 0., 0.05])
+        sim.task['RHand'].setDesiredValue(desiredRHand)
+        # Set desired pose for the left hand
+        currentLHand = sim.task['LHand'].getSensedValue()
+        desiredLHand = incPosition(currentLHand, [-0.05, 0., 0.05])
+        sim.task['LHand'].setDesiredValue(desiredLHand)
         # Add task to the solver
-        sim.solver.pushTask(sim.task['RHand']);
-
-    # When using an interactive session (with ipython) and a single task,
-    # it is recommended to use doTask. After task completion, update the
-    # desired pose and call doTask again
-    # doTask(sim, 'RHand', desiredPosHand, 0.005)
+        sim.pushTask(sim.task['RHand']);
+        sim.pushTask(sim.task['LHand']);
 
     while not rospy.is_shutdown():
-    #for i in xrange(1):
-        # When using rosrun (noninteractive) the following is recommended
         qdes = sim.getPositionControl(q)
         sim.update(qdes)
         q = qdes.copy()

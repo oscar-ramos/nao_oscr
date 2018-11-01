@@ -4,15 +4,17 @@
 #
 # To use it:
 #
-#     1) If floating base is not used (fbase = False):
+#     1) If floating base is used (default):
 #            roslaunch nao_oscr display.launch
-#        If floating base is used (fbase = True):
-#            roslaunch nao_oscr display_floating.launch
+#            rosrun nao_oscr model_parse
 #
-#     2) + Option 1 (interactive):
-#          roscd nao_oscr/scripts; ipython -i nao_model_py
-#        + Option 2:
-#          rosrun nao_oscr nao_model_py
+#        Note: For interactive mode, instead of rosrun use
+#            roscd nao_oscr/scripts
+#            ipython -i model_parse
+#
+#     2) If floating base is not used:
+#            roslaunch nao_oscr display-fixed.launch
+#            rosrun nao_oscr model_parse --base fixed
 #
 
 
@@ -57,22 +59,23 @@ if __name__ == '__main__':
                        1.15, -0.10,  1.4,  0.79, 0.0, 0.0]]).T
         if (False):
             # Change base position
-            q[0] = 0.2
-            q[1] = 0.4
-            q[2] = 0.3
+            q[0,0] = 0.2
+            q[1,0] = 0.4
+            q[2,0] = 0.3
             # Change base orientation
             t = np.pi/3
-            q[3] = np.cos(t)
-            q[4] = np.sin(t)
+            q[3,0] = np.cos(t)
+            q[4,0] = np.sin(t)
     else:
-        q = robot.ndof*[0.,]
+        q = np.array([robot.ndof*[0.,]]).T
     # Set the joint configuration to the robot
     robot.update(q)
     
-    # # Set feet on the ground (to be done just once)
-    # dsole = 0.04511; # From URDF: dist between ankle and sole
-    # q = sim.robot.model.setFeetOnGround("r_ankle", "l_ankle", dsole);
-    # sim.updateModel(q)
+    # Set feet on the ground (to be done just once)
+    if (False):
+        dsole = 0.04511; # From URDF: dist between ankle and sole
+        q = robot.model.setFeetOnGround("r_ankle", "l_ankle", dsole);
+        robot.update(q)
 
     # Positions
     position1 = robot.linkPosition(robot.mlink['l_wrist'])
