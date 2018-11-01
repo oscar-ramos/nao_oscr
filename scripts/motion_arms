@@ -22,9 +22,11 @@
 
 from optparse import OptionParser
 import numpy as np
+import time
 
 import rospy
 from oscr.ros_kine_sim import RosKineSim
+from oscr.ros_logs import RosLogs
 from oscr.utils import incPosition, incPoseLocal
 
 
@@ -39,6 +41,8 @@ if __name__ == '__main__':
     parser.add_option("--solver", dest="solver", default="hqp",
                       help="solver can be hqp (default), ns (nullspace) or \
                       wqp (weighted qp")
+    parser.add_option("--log", dest="log", default="false",
+                      help="log can be back can be true, or false (default)")
     (options, args) = parser.parse_args()
     # Backend: 'pin' (default) or 'rbdl'
     backend = options.back
@@ -48,6 +52,9 @@ if __name__ == '__main__':
     else: print 'Option not supported: use floating or fixed'
     # Solver
     solvertype = options.solver
+    # Logs
+    if (options.log=='true'): do_logs = True
+    else: do_logs = False
         
     # Frequency
     f = 100.0
@@ -80,6 +87,11 @@ if __name__ == '__main__':
         sim.initKineTaskPose('l_wrist','pose','LHand')
         sim.initKineTaskPose('l_ankle','pose','LAnkle')
         sim.initKineTaskPose('r_ankle','pose','RAnkle')
+
+        # Logs
+        logs = RosLogs(sim.robot.pkg+'/data/', 'motion_arms_', f, do_logs)
+        logs.addTask(sim.task['LHand'])
+        logs.addTask(sim.task['RHand'])
         
         # Keep ankles without motion
         sim.task['LAnkle'].keep(10.0)
@@ -122,7 +134,13 @@ if __name__ == '__main__':
         sim.pushTask(sim.task['LHand']);
 
     while not rospy.is_shutdown():
+        logs.save(q)
+        tic = time.time()
         qdes = sim.getPositionControl(q)
+        toc = time.time()
         sim.update(qdes)
         q = qdes.copy()
+        # Save the computation time
+        logs.savetime(tic, toc, show=False)
         sim.rate.sleep()
+    logs.close()
