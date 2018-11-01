@@ -21,7 +21,8 @@ def publish_floor():
    # Floor size in meters
    size = (2.0, 2.0, 0.1)
    # Floor color (RGBA)
-   color = (0.1, 0.1, 0.44, 1.0)
+   # color = (0.1, 0.1, 0.44, 1.0)
+   color = (0., 0., 1.0, 0.5)
 
    marker = Marker()
    marker.header.frame_id = "/map"
