@@ -1,0 +1,188 @@
+#!/usr/bin/env python
+#
+# Generate kinematic motion to control the position/orientation of some
+# operational points of the NAO robot
+#
+# To use it:
+#     roslaunch nao_oscr display.launch
+#     rosrun nao_oscr motion_acrobatic
+#
+
+
+from optparse import OptionParser
+import numpy as np
+import time
+
+import rospy
+from oscr.ros_kine_sim import RosKineSim
+from oscr.utils import incPosition, incPoseLocal
+
+
+def moveBase2Right():
+    sim.task['Base'].setMask([1, 1, 0])
+    currentBase = sim.task['Base'].getSensedValue()
+    desiredBase = currentBase.copy()
+    desiredBase[0][0] -= 0.0
+    desiredBase[1][0] -= 0.05
+    sim.task['Base'].setDesiredValue(desiredBase)
+    sim.pushTask(sim.task['Base'])
+
+def raiseLeftFoot():
+    #print '- At time %f: Raise the left foot'%t
+    currentLFoot = sim.task['LFoot'].getSensedValue()
+    desiredLFoot = incPoseLocal(currentLFoot,
+                                (0.0, 0.0, 0.06),
+                                (0., (1., 0., 0.)))
+    sim.task['LFoot'].setDesiredValue(desiredLFoot)
+    sim.task['LFoot'].setGain(0.3)
+    sim.pushTask(sim.task['LFoot'])
+
+def moveHandsForward():
+    #print '- At time %f: Raise the left foot'%t
+    # Set desired pose for the right hand
+    currentRHand = sim.task['RHand'].getSensedValue()
+    desiredRHand = incPosition(currentRHand, [0.16, 0.0, 0.08])
+    sim.task['RHand'].setDesiredValue(desiredRHand)
+    # Set desired pose for the left hand
+    currentLHand = sim.task['LHand'].getSensedValue()
+    desiredLHand = incPosition(currentLHand, [0.14, 0.0, 0.0])
+    sim.task['LHand'].setDesiredValue(desiredLHand)
+    # Set desired pose for 
+    currentLFoot = sim.task['LFootPosition'].getSensedValue()
+    desiredLFoot = incPosition(currentLFoot, [-0.26, 0.0, 0.14])
+    sim.task['LFootPosition'].setDesiredValue(desiredLFoot)
+    # Decrease gains
+    sim.task['LHand'].setGain(0.3)
+    sim.task['RHand'].setGain(0.3)
+    sim.task['LFootPosition'].setGain(0.3)
+    # Push tasks
+    sim.pushTask(sim.task['RHand'])
+    sim.pushTask(sim.task['LHand'])
+    sim.pushTask(sim.task['LFootPosition'])
+
+def moveHandsBackward():
+    #print '- At time %f: Raise the left foot'%t
+    # Set desired pose for the right hand
+    currentRHand = sim.task['RHand'].getSensedValue()
+    desiredRHand = incPosition(currentRHand, [-0.16, 0.0, -0.08])
+    sim.task['RHand'].setDesiredValue(desiredRHand)
+    # Set desired pose for the left hand
+    currentLHand = sim.task['LHand'].getSensedValue()
+    desiredLHand = incPosition(currentLHand, [-0.14, 0.0, 0.0])
+    sim.task['LHand'].setDesiredValue(desiredLHand)
+    # Set desired pose for 
+    currentLFoot = sim.task['LFootPosition'].getSensedValue()
+    desiredLFoot = incPosition(currentLFoot, [0.26, 0.0, -0.14])
+    sim.task['LFootPosition'].setDesiredValue(desiredLFoot)
+
+def lowerLeftFoot():
+    #print '- At time %f: Raise the left foot'%t
+    currentLFoot = sim.task['LFoot'].getSensedValue()
+    desiredLFoot = np.array([[-0.01045973, 0.05, 0.04511074, 1.,0.,0.,0.]]).T
+    sim.task['LFoot'].setDesiredValue(desiredLFoot)
+    sim.task['LFoot'].setGain(0.5)
+    sim.pushTask(sim.task['LFoot'])
+
+def moveBase2Left():
+    currentBase = sim.task['Base'].getSensedValue()
+    desiredBase = currentBase.copy()
+    desiredBase[1][0] += 0.05
+    sim.task['Base'].setDesiredValue(desiredBase) 
+    sim.pushTask(sim.task['Base'])
+ 
+    
+if __name__ == '__main__':
+
+    # Parse the arguments
+    parser = OptionParser()
+    parser.add_option("--back", dest="back", default="pin",
+                      help="back can be pin (default), rbdl, or ff6dof")
+    parser.add_option("--solver", dest="solver", default="hqp",
+                      help="solver can be hqp (default), ns (nullspace) or \
+                      wqp (weighted qp")
+    (options, args) = parser.parse_args()
+    # Backend: 'pin' (default) or 'rbdl'
+    backend = options.back
+    # Solver
+    solvertype = options.solver
+        
+    # Frequency
+    f = 100.0
+    # Robot simulation instance ('pin' or 'rbdl')
+    sim = RosKineSim('naoMotion', 'nao_oscr',
+                     '/urdf/naoV40red.urdf', f, True, backend, show_markers=False)
+
+    # Joint configuration
+    q = np.array([[0.0, 0.0, 0.33046, 1.0, 0.0, 0.0, 0.0,
+                   0.0, 0.0,
+                   0.0, 0.0, -0.1, 0.3, -0.2, 0.0,
+                   1.15,  0.10, -1.4, -0.79, 0.0, 0.0,
+                   0.0, 0.0, -0.1, 0.3, -0.2, 0.0,
+                   1.15, -0.10,  1.4,  0.79, 0.0, 0.0]]).T
+    # Set the configuration to the robot
+    sim.update(q)
+
+    # Initialize solver: use 'HQP', 'NS' or 'WQP'
+    if solvertype == 'hqp': sim.initKineSolver(q)  # default is HQP
+    elif solvertype == 'ns': sim.initKineSolver(q, 'NS')
+    elif solvertype == 'wqp': sim.initKineSolver(q, 'WQP')
+    else: print 'Solver type not supported'
+
+    # Tasks for contact with the ground
+    sim.initKineTaskPose('l_ankle','pose','contactL', show_markers=False)
+    sim.initKineTaskPose('r_ankle','pose','contactR', show_markers=False)
+    sim.task['contactL'].keep(100.0)
+    sim.task['contactR'].keep(100.0)
+    
+    # Tasks initialization
+    sim.initKineTaskPose('r_wrist','position','RHand')
+    sim.initKineTaskPose('l_wrist','position','LHand')
+    sim.initKineTaskPose('l_ankle','pose','LFoot')
+    sim.initKineTaskPose('l_ankle','position','LFootPosition')
+    sim.initKineTaskPose('r_ankle','pose','RFoot')
+    sim.initKineTaskPose('Head','orientation','Head')
+    sim.initKineTaskPose('base_link','position','Base', show_markers=False)
+
+    # Add task to the solver
+    sim.pushTask(sim.task['contactL'])
+    sim.pushTask(sim.task['contactR'])
+    
+    state = 0
+    while not rospy.is_shutdown():
+        if (state==0):
+            moveBase2Right()
+            state = 1
+        elif (state==1):
+            if (np.linalg.norm(sim.task['Base'].getError()) < 1e-3):
+                sim.removeTask("contactL")
+                raiseLeftFoot()
+                state = 2
+        elif (state==2):
+            if (np.linalg.norm(sim.task['LFoot'].getError()) < 1e-2):
+                sim.removeTask('LFoot')
+                moveHandsForward()
+                state = 3
+        elif (state==3):
+            if (np.linalg.norm(sim.task['LFootPosition'].getError()) < 3e-3):
+                moveHandsBackward()
+                state = 4
+        elif (state==4):
+            if (np.linalg.norm(sim.task['LFootPosition'].getError()) < 1e-2):
+                sim.removeTask('RHand')
+                sim.removeTask('LHand')
+                sim.removeTask('LFootPosition')
+                lowerLeftFoot()
+                state = 5
+        elif (state==5):
+            if (np.linalg.norm(sim.task['LFoot'].getError()) < 1e-3):
+                sim.removeTask('Base')
+                sim.removeTask('LFoot')
+                sim.pushTask(sim.task['contactL'])
+                moveBase2Left()
+                state = 6
+                
+        qdes = sim.getPositionControl(q)
+        sim.update(qdes)
+        #sim.update(q)
+        q = qdes.copy()
+        sim.rate.sleep()
