@@ -27,7 +27,7 @@ if __name__ == '__main__':
     # Parse the arguments
     parser = OptionParser()
     parser.add_option("--back", dest="back", default="pin",
-                      help="back can be pin (default), rbdl, or ff6dof")
+                      help="back can be pin (default) or rbdl")
     parser.add_option("--mtype", dest="mtype", default="1",
                       help="type of motion: 1, 2, 3 4")
     parser.add_option("--solver", dest="solver", default="hqp",
